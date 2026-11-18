@@ -26,7 +26,6 @@ services:
       retries: 10
 
 
-  # اتأجّل لحد يوم 32 (Dockerfile والنشر). شغّله وقتها بـ: docker compose --profile app up
   backend:
     profiles: ["app"]
     build: .
