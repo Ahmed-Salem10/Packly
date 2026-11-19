@@ -1,0 +1,252 @@
+
+from sqlalchemy import func, select, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+from packly.modules.identity.models import OrgType, Users, Organizations,Memberships,MembershipType
+
+
+class UserRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_user(
+        self,
+        phone: str,
+        name: str,
+        email: str,
+    ) -> Users:
+        new_user = Users(
+            phone=phone,
+            name=name,
+            email=email,
+        )
+
+        self.session.add(new_user)
+        await self.session.flush()
+
+        return new_user
+
+    async def get_user_by_phone(
+        self,
+        phone: str,
+    ) -> Users | None:
+        result = await self.session.execute(
+            select(Users).where(Users.phone == phone)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_user_by_id(
+        self,
+        user_id: str,
+    ) -> Users | None:
+        result = await self.session.execute(
+            select(Users).where(Users.id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_user_by_email(self, email: str) -> Users | None:
+        result = await self.session.execute(
+            select(Users).where(Users.email == email)
+        )
+        return result.scalar_one_or_none()
+
+    async def update_user(
+        self,
+        user_id: str,
+        **kwargs,
+    ) -> Users | None:
+        await self.session.execute(
+            update(Users)
+            .where(Users.id == user_id)
+            .values(**kwargs)
+        )
+        await self.session.flush()
+
+        return await self.get_user_by_id(user_id)
+
+    async def delete_user(self, user_id: str) -> None:
+        await self.session.execute(
+            delete(Users).where(Users.id == user_id)
+        )
+        await self.session.flush()
+
+
+class OrganizationRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_organization(
+        self,
+        name: str,
+        org_type: OrgType,
+        address: str,
+    ) -> Organizations:
+        new_org = Organizations(
+            name=name,
+            type=org_type,
+            address=address,
+        )
+
+        self.session.add(new_org)
+        await self.session.flush()
+
+        return new_org
+
+    async def get_organization_by_id(
+        self,
+        org_id: str,
+    ) -> Organizations | None:
+        result = await self.session.execute(
+            select(Organizations).where(
+                Organizations.id == org_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_organization_by_name(
+        self,
+        name: str,
+    ) -> Organizations | None:
+        result = await self.session.execute(
+            select(Organizations).where(
+                Organizations.name == name
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def update_organization(
+        self,
+        org_id: str,
+        **kwargs,
+    ) -> Organizations | None:
+        await self.session.execute(
+            update(Organizations)
+            .where(Organizations.id == org_id)
+            .values(**kwargs)
+        )
+        await self.session.flush()
+
+        return await self.get_organization_by_id(org_id)
+
+    async def delete_organization(
+        self,
+        org_id: str,
+    ) -> None:
+        await self.session.execute(
+            delete(Organizations).where(
+                Organizations.id == org_id
+            )
+        )
+        await self.session.flush()
+
+
+class MembershipRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_membership(
+        self,
+        user_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        role: MembershipType,
+    ) -> Memberships:
+
+        membership = Memberships(
+            user_id=user_id,
+            organization_id=organization_id,
+            role=role,
+        )
+
+        self.session.add(membership)
+        await self.session.flush()
+
+        return membership
+
+    async def get_membership(
+        self,
+        user_id: uuid.UUID,
+        organization_id: uuid.UUID,
+    ) -> Memberships | None:
+
+        result = await self.session.execute(
+            select(Memberships).where(
+                Memberships.user_id == user_id,
+                Memberships.organization_id == organization_id,
+            )
+        )
+
+        return result.scalar_one_or_none()
+
+    async def get_user_memberships(
+        self,
+        user_id: uuid.UUID,
+    ) -> list[Memberships]:
+
+        result = await self.session.execute(
+            select(Memberships).where(
+                Memberships.user_id == user_id
+            )
+        )
+
+        return list(result.scalars().all())
+
+    async def get_organization_memberships(
+        self, organization_id: uuid.UUID
+    ) -> list[Memberships]:
+        result = await self.session.execute(
+            select(Memberships).where(Memberships.organization_id == organization_id)
+        )
+        return list(result.scalars().all())
+
+
+    async def delete_membership(
+        self,
+        user_id: uuid.UUID,
+        organization_id: uuid.UUID,
+    ) -> None:
+
+        membership = await self.get_membership(
+            user_id,
+            organization_id,
+        )
+
+        if membership is not None:
+            await self.session.delete(membership)
+            await self.session.flush()
+
+    async def count_owners(self, organization_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Memberships)
+            .where(
+                Memberships.organization_id == organization_id,
+                Memberships.role == MembershipType.owner,
+            )
+        )
+        return result.scalar_one()
+
+
+    _UPDATABLE_FIELDS = {"role"}
+    
+    async def update_membership(
+        self,
+        user_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        **kwargs,
+    ) -> Memberships | None:
+        invalid = set(kwargs) - self._UPDATABLE_FIELDS
+        if invalid:
+            raise ValueError(f"Fields cannot be updated: {sorted(invalid)}")
+
+        if kwargs:
+            await self.session.execute(
+                update(Memberships)
+                .where(
+                    Memberships.user_id == user_id,
+                    Memberships.organization_id == organization_id,
+                )
+                .values(**kwargs)
+            )
+            await self.session.flush()
+
+        return await self.get_membership(user_id, organization_id)

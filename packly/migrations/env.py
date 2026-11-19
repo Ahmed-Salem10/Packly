@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from packly.core.models import Base
 from packly.core.config import get_settings
-import packly.modules.identity.models #noqa: F401
+from packly.modules.identity.models import Users, Organizations, Memberships
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

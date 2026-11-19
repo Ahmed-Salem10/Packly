@@ -1,0 +1,54 @@
+from packly.core.models import Base,IdMixin,TimestampMixin
+from sqlalchemy.orm import Mapped, mapped_column 
+from sqlalchemy import ForeignKey, String,Boolean, Uuid, UniqueConstraint
+import enum
+import uuid
+
+class Users(Base, IdMixin, TimestampMixin):
+    __tablename__ = "users"
+    phone: Mapped[str] = mapped_column(String(15), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+
+
+
+class OrgType(str,enum.Enum):
+    buyer = "buyer"
+    factory = "factory"
+    stuff= "stuff"
+
+class MembershipType(str,enum.Enum):
+    owner = "owner"
+    member= "member"
+    viewer= "viewer"
+
+
+class Organizations(Base, IdMixin, TimestampMixin):
+    __tablename__ = "organizations"
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    type: Mapped[OrgType] = mapped_column(String(20), nullable=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    address: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class Memberships(Base, IdMixin, TimestampMixin):
+    __tablename__ = "memberships"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "organization_id"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,index=True
+    )
+
+    role: Mapped[MembershipType] = mapped_column(
+        String(20),
+        nullable=False,
+    )
