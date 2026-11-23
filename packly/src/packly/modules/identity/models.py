@@ -12,11 +12,11 @@ class Users(Base, IdMixin, TimestampMixin):
 
 
 
-class OrgType(str,enum.Enum):
+class OrgType(str, enum.Enum):
     buyer = "buyer"
     factory = "factory"
-    stuff= "stuff"
-
+    staff = "staff"
+    
 class MembershipType(str,enum.Enum):
     owner = "owner"
     member= "member"
