@@ -1,12 +1,10 @@
 import hashlib
 import hmac
 import logging
-import re
 import secrets
 
 from packly.core.config import get_settings
 from packly.core.redis import redis_client
-from packly.modules.identity import normalize_phone
 
 logger = logging.getLogger(__name__)
 

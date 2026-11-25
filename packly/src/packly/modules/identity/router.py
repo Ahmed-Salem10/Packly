@@ -101,7 +101,7 @@ async def request_otp(
 
     try:
         # 4. Generate OTP
-        otp = generate_otp(phone)
+        otp = generate_otp()
 
         # 5. Store hashed OTP in Redis
         await store_otp(phone, otp)
