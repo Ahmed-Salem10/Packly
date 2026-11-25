@@ -42,117 +42,71 @@ def _hash_otp(phone: str, otp: str) -> str:
     ).hexdigest()
 
 
-async def store_otp(phone: str, otp: str) -> None:
-    """
-    Store the hashed OTP in Redis with an expiration time.
 
-    Also resets previous failed attempts.
-    """
+async def store_otp(phone: str, otp: str) -> None:
     settings = get_settings()
 
-    phone = normalize_phone(phone)
-
-    otp_key = f"otp:{phone}"
-    attempts_key = f"otp_attempts:{phone}"
-
+    # Don't reset failed attempts when requesting a new OTP.
     await redis_client.set(
-        otp_key,
+        f"otp:{phone}",
         _hash_otp(phone, otp),
         ex=settings.otp_ttl,
     )
-
-    await redis_client.delete(attempts_key)
-
 
 async def send_otp(phone: str, otp: str) -> None:
     settings = get_settings()
 
     if not settings.is_production:
-        logger.info("DEV OTP | phone=%s | code=%s", phone, otp)
+        logger.info(
+            "DEV ONLY - OTP for %s: %s",
+            phone,
+            otp,
+        )
         return
 
-    # Production:
-    # await whatsapp_provider.send_otp(phone, otp)
-
-    raise NotImplementedError(
-        "Configure OTP provider for production"
-    )
-
+    # Production provider integration
+    raise NotImplementedError("Configure OTP provider")
 
 async def _lock(phone: str) -> None:
-    """
-    Lock OTP verification for the configured lock duration.
-
-    The OTP and attempts counter are deleted so the current OTP
-    cannot be used after the account is locked.
-    """
     settings = get_settings()
 
-    phone = normalize_phone(phone)
-
-    otp_key = f"otp:{phone}"
-    attempts_key = f"otp_attempts:{phone}"
-    lock_key = f"otp_lock:{phone}"
-
+    # Remove the current OTP and attempts.
     await redis_client.delete(
-        otp_key,
-        attempts_key,
+        f"otp:{phone}",
+        f"otp_attempts:{phone}",
     )
 
+    # Create a separate lock key.
     await redis_client.set(
-        lock_key,
+        f"otp_lock:{phone}",
         "1",
         ex=settings.lock_seconds,
     )
 
 
 async def verify_otp(phone: str, otp: str) -> bool:
-    """
-    Verify an OTP.
-
-    Returns:
-        True  -> OTP is valid.
-        False -> OTP is invalid or expired.
-
-    Raises:
-        OTPLocked -> maximum failed attempts reached.
-    """
     settings = get_settings()
-
-    phone = normalize_phone(phone)
 
     otp_key = f"otp:{phone}"
     attempts_key = f"otp_attempts:{phone}"
     lock_key = f"otp_lock:{phone}"
 
-    # 1. Check whether the user is currently locked.
+    # 1. Check temporary lock.
     if await redis_client.exists(lock_key):
         raise OTPLocked()
 
-    # 2. Check current failed attempts.
-    attempts = await redis_client.get(attempts_key)
-
-    if attempts is not None and int(attempts) >= settings.max_attempts:
-        await _lock(phone)
-        raise OTPLocked()
-
-    # 3. Get stored OTP hash.
+    # 2. Get stored OTP.
     stored_hash = await redis_client.get(otp_key)
 
     if stored_hash is None:
-        logger.warning(
-            "No OTP found for %s",
-            phone,
-        )
         return False
 
-    # 4. Hash the OTP entered by the user.
+    # 3. Compare hashes.
     provided_hash = _hash_otp(phone, otp)
 
-    # 5. Compare hashes securely.
     if hmac.compare_digest(stored_hash, provided_hash):
 
-        # Delete OTP immediately so it can only be used once.
+        # 4. Delete OTP after successful verification.
         deleted = await redis_client.delete(otp_key)
 
         if deleted == 1:
@@ -161,24 +115,17 @@ async def verify_otp(phone: str, otp: str) -> bool:
 
         return False
 
-    # 6. Wrong OTP → increment failed attempts.
+    # 5. Increment failed attempts.
     attempts = await redis_client.incr(attempts_key)
 
-    # Set expiration on the attempts counter.
+    # Start the attempts expiration only once.
     if attempts == 1:
         await redis_client.expire(
             attempts_key,
-            settings.lock_seconds,
+            settings.otp_ttl,
         )
 
-    logger.warning(
-        "Invalid OTP attempt for %s. Attempt %s/%s",
-        phone,
-        attempts,
-        settings.max_attempts,
-    )
-
-    # 7. Maximum attempts reached → lock the user.
+    # 6. Lock after reaching maximum attempts.
     if attempts >= settings.max_attempts:
         await _lock(phone)
         raise OTPLocked()
