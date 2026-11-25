@@ -13,6 +13,7 @@ dependencies = [
     "fastapi>=0.163.1",
     "psycopg[binary]>=3.3.9",
     "pydantic-settings>=2.16.3",
+    "pydantic[email]>=2.14.3",
     "pydentic>=0.0.1.dev3",
     "redis>=8.1.0",
     "slowapi>=0.1.10",
