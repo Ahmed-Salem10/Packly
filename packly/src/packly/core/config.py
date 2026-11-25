@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     llm_key: SecretStr | None = None
 
+    lock_seconds: int = 5
+    max_attempts: int = 5
+    otp_secret_key: SecretStr
+    otp_ttl: int = 300
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -1,5 +1,5 @@
 import pytest
-from packly.modules.identity.phone import normalize_phone, InvalidPhoneError
+from packly.modules.identity.utils.phone import normalize_phone, InvalidPhoneError
 
 @pytest.mark.parametrize("raw", [
     "01012345678", "+201012345678", "00201012345678", "201012345678",

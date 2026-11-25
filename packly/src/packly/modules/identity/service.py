@@ -10,7 +10,7 @@ from packly.modules.identity.models import (
     Organizations,
     Users,
 )
-from packly.modules.identity.phone import normalize_phone
+from packly.modules.identity.utils.phone import normalize_phone
 from packly.modules.identity.repository import (
     MembershipRepository,
     OrganizationRepository,
