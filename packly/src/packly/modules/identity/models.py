@@ -1,6 +1,6 @@
 import enum
 import uuid
-
+from datetime import datetime
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -70,9 +70,9 @@ class Sessions(Base, IdMixin, TimestampMixin):
     refresh_token_hash: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False
     )
-    expires_at: Mapped[DateTime] = mapped_column(
+    expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    revoked_at: Mapped[DateTime | None] = mapped_column(
+    revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

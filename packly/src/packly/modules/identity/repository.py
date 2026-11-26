@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime
 from typing import ClassVar
 
-from sqlalchemy import DateTime, delete, func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packly.modules.identity.models import (
@@ -22,35 +23,29 @@ class UserRepository:
         self,
         phone: str,
         name: str,
-        email: str,
+        email: str | None,
     ) -> Users:
-        new_user = Users(
-            phone=phone,
-            name=name,
-            email=email,
-        )
-
+        new_user = Users(phone=phone, name=name, email=email)
         self.session.add(new_user)
         await self.session.flush()
-
         return new_user
 
-    async def get_user_by_phone(
-        self,
-        phone: str,
-    ) -> Users | None:
-        result = await self.session.execute(select(Users).where(Users.phone == phone))
+    async def get_user_by_phone(self, phone: str) -> Users | None:
+        result = await self.session.execute(
+            select(Users).where(Users.phone == phone)
+        )
         return result.scalar_one_or_none()
 
-    async def get_user_by_id(
-        self,
-        user_id: uuid.UUID,
-    ) -> Users | None:
-        result = await self.session.execute(select(Users).where(Users.id == user_id))
+    async def get_user_by_id(self, user_id: uuid.UUID) -> Users | None:
+        result = await self.session.execute(
+            select(Users).where(Users.id == user_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_user_by_email(self, email: str) -> Users | None:
-        result = await self.session.execute(select(Users).where(Users.email == email))
+        result = await self.session.execute(
+            select(Users).where(Users.email == email)
+        )
         return result.scalar_one_or_none()
 
     async def update_user(
@@ -58,15 +53,25 @@ class UserRepository:
         user_id: uuid.UUID,
         **kwargs,
     ) -> Users | None:
-        await self.session.execute(
-            update(Users).where(Users.id == user_id).values(**kwargs)
-        )
-        await self.session.flush()
+        allowed_fields = {"name", "email", "phone"}
+        invalid = set(kwargs) - allowed_fields
+        if invalid:
+            raise ValueError(f"Fields cannot be updated: {sorted(invalid)}")
+
+        if kwargs:
+            await self.session.execute(
+                update(Users)
+                .where(Users.id == user_id)
+                .values(**kwargs)
+            )
+            await self.session.flush()
 
         return await self.get_user_by_id(user_id)
 
     async def delete_user(self, user_id: uuid.UUID) -> None:
-        await self.session.execute(delete(Users).where(Users.id == user_id))
+        await self.session.execute(
+            delete(Users).where(Users.id == user_id)
+        )
         await self.session.flush()
 
 
@@ -85,10 +90,8 @@ class OrganizationRepository:
             type=org_type,
             address=address,
         )
-
         self.session.add(new_org)
         await self.session.flush()
-
         return new_org
 
     async def get_organization_by_id(
@@ -97,6 +100,18 @@ class OrganizationRepository:
     ) -> Organizations | None:
         result = await self.session.execute(
             select(Organizations).where(Organizations.id == org_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_organization_for_update(
+        self,
+        org_id: uuid.UUID,
+    ) -> Organizations | None:
+        """Lock the organization row until the current transaction completes."""
+        result = await self.session.execute(
+            select(Organizations)
+            .where(Organizations.id == org_id)
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 
@@ -109,22 +124,44 @@ class OrganizationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_user_organizations(
+        self,
+        user_id: uuid.UUID,
+    ) -> list[tuple[Organizations, MembershipType]]:
+        result = await self.session.execute(
+            select(Organizations, Memberships.role)
+            .join(
+                Memberships,
+                Memberships.organization_id == Organizations.id,
+            )
+            .where(Memberships.user_id == user_id)
+        )
+        return [
+            (organization, MembershipType(role))
+            for organization, role in result.all()
+        ]
+
     async def update_organization(
         self,
         org_id: uuid.UUID,
         **kwargs,
     ) -> Organizations | None:
-        await self.session.execute(
-            update(Organizations).where(Organizations.id == org_id).values(**kwargs)
-        )
-        await self.session.flush()
+        allowed_fields = {"name", "address", "verified"}
+        invalid = set(kwargs) - allowed_fields
+        if invalid:
+            raise ValueError(f"Fields cannot be updated: {sorted(invalid)}")
+
+        if kwargs:
+            await self.session.execute(
+                update(Organizations)
+                .where(Organizations.id == org_id)
+                .values(**kwargs)
+            )
+            await self.session.flush()
 
         return await self.get_organization_by_id(org_id)
 
-    async def delete_organization(
-        self,
-        org_id: uuid.UUID,
-    ) -> None:
+    async def delete_organization(self, org_id: uuid.UUID) -> None:
         await self.session.execute(
             delete(Organizations).where(Organizations.id == org_id)
         )
@@ -141,16 +178,13 @@ class MembershipRepository:
         organization_id: uuid.UUID,
         role: MembershipType,
     ) -> Memberships:
-
         membership = Memberships(
             user_id=user_id,
             organization_id=organization_id,
             role=role,
         )
-
         self.session.add(membership)
         await self.session.flush()
-
         return membership
 
     async def get_membership(
@@ -158,32 +192,31 @@ class MembershipRepository:
         user_id: uuid.UUID,
         organization_id: uuid.UUID,
     ) -> Memberships | None:
-
         result = await self.session.execute(
             select(Memberships).where(
                 Memberships.user_id == user_id,
                 Memberships.organization_id == organization_id,
             )
         )
-
         return result.scalar_one_or_none()
 
     async def get_user_memberships(
         self,
         user_id: uuid.UUID,
     ) -> list[Memberships]:
-
         result = await self.session.execute(
             select(Memberships).where(Memberships.user_id == user_id)
         )
-
         return list(result.scalars().all())
 
     async def get_organization_memberships(
-        self, organization_id: uuid.UUID
+        self,
+        organization_id: uuid.UUID,
     ) -> list[Memberships]:
         result = await self.session.execute(
-            select(Memberships).where(Memberships.organization_id == organization_id)
+            select(Memberships).where(
+                Memberships.organization_id == organization_id
+            )
         )
         return list(result.scalars().all())
 
@@ -192,15 +225,13 @@ class MembershipRepository:
         user_id: uuid.UUID,
         organization_id: uuid.UUID,
     ) -> None:
-
-        membership = await self.get_membership(
-            user_id,
-            organization_id,
+        await self.session.execute(
+            delete(Memberships).where(
+                Memberships.user_id == user_id,
+                Memberships.organization_id == organization_id,
+            )
         )
-
-        if membership is not None:
-            await self.session.delete(membership)
-            await self.session.flush()
+        await self.session.flush()
 
     async def count_owners(self, organization_id: uuid.UUID) -> int:
         result = await self.session.execute(
@@ -212,6 +243,21 @@ class MembershipRepository:
             )
         )
         return result.scalar_one()
+
+    async def user_is_platform_staff(self, user_id: uuid.UUID) -> bool:
+        result = await self.session.execute(
+            select(Memberships.user_id)
+            .join(
+                Organizations,
+                Organizations.id == Memberships.organization_id,
+            )
+            .where(
+                Memberships.user_id == user_id,
+                Organizations.type == OrgType.staff,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
 
     _UPDATABLE_FIELDS: ClassVar[set[str]] = {"role"}
 
@@ -248,7 +294,7 @@ class SessionRepository:
         user_id: uuid.UUID,
         organization_id: uuid.UUID | None,
         refresh_token_hash: str,
-        expires_at: DateTime,
+        expires_at: datetime,
     ) -> Sessions:
         new_session = Sessions(
             user_id=user_id,
@@ -262,15 +308,20 @@ class SessionRepository:
 
     async def get_by_token_hash(self, token_hash: str) -> Sessions | None:
         result = await self.session.execute(
-            select(Sessions).where(Sessions.refresh_token_hash == token_hash)
+            select(Sessions).where(
+                Sessions.refresh_token_hash == token_hash
+            )
         )
         return result.scalar_one_or_none()
 
     async def revoke_session(self, session_id: uuid.UUID) -> bool:
-        """Atomically revoke. Returns False if it was already revoked (lost a race)."""
+        """Atomically revoke only if the session is not already revoked."""
         result = await self.session.execute(
             update(Sessions)
-            .where(Sessions.id == session_id, Sessions.revoked_at.is_(None))
+            .where(
+                Sessions.id == session_id,
+                Sessions.revoked_at.is_(None),
+            )
             .values(revoked_at=func.now())
             .returning(Sessions.id)
         )
@@ -280,7 +331,10 @@ class SessionRepository:
     async def revoke_all_for_user(self, user_id: uuid.UUID) -> None:
         await self.session.execute(
             update(Sessions)
-            .where(Sessions.user_id == user_id, Sessions.revoked_at.is_(None))
+            .where(
+                Sessions.user_id == user_id,
+                Sessions.revoked_at.is_(None),
+            )
             .values(revoked_at=func.now())
         )
         await self.session.flush()
