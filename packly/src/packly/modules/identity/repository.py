@@ -9,8 +9,8 @@ from packly.modules.identity.models import (
     MembershipType,
     Organizations,
     OrgType,
-    Users,
     Sessions,
+    Users,
 )
 
 

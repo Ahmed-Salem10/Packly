@@ -45,9 +45,13 @@ def require_role(*roles: str | Enum):
     """Usage: dependencies=[Depends(require_role("owner"))]"""
     allowed = {r.value if isinstance(r, Enum) else r for r in roles}
 
-    async def checker(user: Annotated[CurrentUser, Depends(current_user)]) -> CurrentUser:
+    async def checker(
+        user: Annotated[CurrentUser, Depends(current_user)],
+    ) -> CurrentUser:
         if user.role not in allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role"
+            )
         return user
 
     return checker

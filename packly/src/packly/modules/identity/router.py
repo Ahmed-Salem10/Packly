@@ -1,33 +1,26 @@
 import logging
 from typing import Annotated
 
-from fastapi import (
-    APIRouter,
-    HTTPException,
-    Request,
-    Response,
-    status,
-    Depends
-)
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from packly.core.ratelimit import limiter
 from packly.core.redis import redis_client
 from packly.modules.identity.deps import CurrentUser, current_user, get_identity_service
 from packly.modules.identity.schemas import (
+    CurrentUserResponse,
+    LogoutRequest,
     OTPRequest,
     OTPRequestResponse,
     OTPVerify,
-    OTPVerifyResponse,
-    CurrentUserResponse,
-    LogoutRequest,
     RefreshRequest,
     TokenResponse,
 )
-
 from packly.modules.identity.service import (
-    IdentityService, InvalidRefreshTokenError, PermissionDeniedError, UserNotFoundError,
+    IdentityService,
+    InvalidRefreshTokenError,
+    PermissionDeniedError,
+    UserNotFoundError,
 )
-
 from packly.modules.identity.utils.otp import (
     OTPLocked,
     generate_otp,
@@ -147,7 +140,7 @@ async def verify_otp_endpoint(
     payload: OTPVerify,
     request: Request,
     response: Response,
-    service: Annotated[IdentityService, Depends(IdentityService)],
+    service: Annotated[IdentityService, Depends(get_identity_service)],
 ):
     """
     Verify the OTP entered by the user.
@@ -204,9 +197,14 @@ async def verify_otp_endpoint(
     try:
         tokens = await service.login(user, payload.organization_id)
     except PermissionDeniedError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
 
-    return TokenResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)
+    return TokenResponse(
+        access_token=tokens.access_token, refresh_token=tokens.refresh_token
+    )
+
 
 auth_router = APIRouter(prefix="/v1/auth", tags=["Auth"])
 
@@ -227,7 +225,9 @@ async def refresh(
             detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
-    return TokenResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)
+    return TokenResponse(
+        access_token=tokens.access_token, refresh_token=tokens.refresh_token
+    )
 
 
 @auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

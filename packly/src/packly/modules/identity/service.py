@@ -1,9 +1,17 @@
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from packly.core.config import get_settings
+from packly.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_refresh_token,
+)
 from packly.modules.identity.models import (
     Memberships,
     MembershipType,
@@ -14,6 +22,7 @@ from packly.modules.identity.models import (
 from packly.modules.identity.repository import (
     MembershipRepository,
     OrganizationRepository,
+    SessionRepository,
     UserRepository,
 )
 from packly.modules.identity.schemas import (
@@ -23,11 +32,7 @@ from packly.modules.identity.schemas import (
     UserCreate,
 )
 from packly.modules.identity.utils.phone import normalize_phone
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 
-from packly.core.config import get_settings
-from packly.core.security import create_access_token, create_refresh_token, hash_refresh_token
 
 # ───────────────────────── Exceptions ─────────────────────────
 class IdentityError(Exception):
@@ -65,6 +70,7 @@ class PermissionDeniedError(IdentityError):
 class LastOwnerError(IdentityError):
     """Raised when an action would leave an organization without an owner."""
 
+
 class InvalidRefreshTokenError(IdentityError):
     pass
 
@@ -92,6 +98,7 @@ class IdentityService:
         self.users = UserRepository(session)
         self.orgs = OrganizationRepository(session)
         self.memberships = MembershipRepository(session)
+        self.sessions = SessionRepository(session)
 
     # ───────── Users ─────────
     async def register_user(self, data: UserCreate) -> Users:
@@ -294,7 +301,9 @@ class IdentityService:
                 (m for m in memberships if m.organization_id == organization_id), None
             )
             if membership is None:
-                raise PermissionDeniedError("You are not a member of this organization.")
+                raise PermissionDeniedError(
+                    "You are not a member of this organization."
+                )
         elif memberships:
             membership = min(memberships, key=lambda m: m.created_at)  # oldest
 
@@ -304,7 +313,9 @@ class IdentityService:
 
     async def refresh_tokens(self, refresh_token: str) -> TokenPair:
         """Rotate: the old refresh token dies, a new pair is issued."""
-        stored = await self.sessions.get_by_token_hash(hash_refresh_token(refresh_token))
+        stored = await self.sessions.get_by_token_hash(
+            hash_refresh_token(refresh_token)
+        )
         if stored is None:
             raise InvalidRefreshTokenError("Invalid refresh token.")
 
@@ -336,7 +347,9 @@ class IdentityService:
 
     async def logout(self, refresh_token: str) -> None:
         """Idempotent: unknown or already-revoked tokens are ignored."""
-        stored = await self.sessions.get_by_token_hash(hash_refresh_token(refresh_token))
+        stored = await self.sessions.get_by_token_hash(
+            hash_refresh_token(refresh_token)
+        )
         if stored is not None:
             await self.sessions.revoke_session(stored.id)
             await self.session.commit()
@@ -356,7 +369,8 @@ class IdentityService:
             user_id=user_id,
             organization_id=org_id,
             refresh_token_hash=hash_refresh_token(refresh),
-            expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days),
+            expires_at=datetime.now(UTC)
+            + timedelta(days=settings.refresh_token_expire_days),
         )
         return TokenPair(
             access_token=create_access_token(user_id, org_id, role),

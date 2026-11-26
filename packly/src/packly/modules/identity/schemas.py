@@ -126,6 +126,7 @@ class OTPVerifyResponse(BaseModel):
     message: str
     verified: bool
 
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

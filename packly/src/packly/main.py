@@ -4,7 +4,7 @@ from slowapi.errors import RateLimitExceeded
 
 from packly.core.logging import setup_logging
 from packly.core.ratelimit import limiter
-from packly.modules.identity.router import router,auth_router,me_router
+from packly.modules.identity.router import auth_router, me_router, router
 
 
 def create_app() -> FastAPI:

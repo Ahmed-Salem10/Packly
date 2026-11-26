@@ -7,8 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str
     redis_url: str
-
-    jwt_secret_key: SecretStr
     llm_key: SecretStr | None = None
 
     lock_seconds: int = 900
