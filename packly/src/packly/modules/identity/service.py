@@ -1,16 +1,16 @@
 import uuid
+from typing import ClassVar
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packly.modules.identity.models import (
-    MembershipType,
     Memberships,
-    OrgType,
+    MembershipType,
     Organizations,
+    OrgType,
     Users,
 )
-from packly.modules.identity.utils.phone import normalize_phone
 from packly.modules.identity.repository import (
     MembershipRepository,
     OrganizationRepository,
@@ -22,6 +22,7 @@ from packly.modules.identity.schemas import (
     OrganizationCreate,
     UserCreate,
 )
+from packly.modules.identity.utils.phone import normalize_phone
 
 
 # ───────────────────────── Exceptions ─────────────────────────
@@ -71,7 +72,7 @@ class IdentityService:
     """
 
     # Types a normal user may create. `staff` is internal (platform team).
-    SELF_SERVICE_ORG_TYPES = {OrgType.buyer, OrgType.factory}
+    SELF_SERVICE_ORG_TYPES: ClassVar[set[OrgType]] = {OrgType.buyer, OrgType.factory}
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -111,7 +112,9 @@ class IdentityService:
         await self._require_user(creator_id)
 
         if data.org_type not in self.SELF_SERVICE_ORG_TYPES:
-            raise PermissionDeniedError("This organization type cannot be created here.")
+            raise PermissionDeniedError(
+                "This organization type cannot be created here."
+            )
 
         if await self.orgs.get_organization_by_name(data.name):
             raise OrganizationAlreadyExistsError("Organization name already taken.")
@@ -152,6 +155,8 @@ class IdentityService:
         await self._require_platform_staff(actor_id)
         await self._require_org(org_id)
         org = await self.orgs.update_organization(org_id, verified=True)
+        if org is None:
+            raise OrganizationNotFoundError("Organization not found.")
         await self.session.commit()
         return org
 
@@ -199,6 +204,8 @@ class IdentityService:
         updated = await self.memberships.update_membership(
             target_user_id, org_id, role=data.role
         )
+        if updated is None:
+            raise MembershipNotFoundError("User is not a member of this organization.")
         await self.session.commit()
         return updated
 

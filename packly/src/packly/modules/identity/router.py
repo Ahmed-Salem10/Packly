@@ -1,4 +1,3 @@
-
 import logging
 
 from fastapi import (
@@ -11,24 +10,20 @@ from fastapi import (
 
 from packly.core.ratelimit import limiter
 from packly.core.redis import redis_client
-
 from packly.modules.identity.schemas import (
     OTPRequest,
-    OTPVerify,
     OTPRequestResponse,
+    OTPVerify,
     OTPVerifyResponse,
 )
-
 from packly.modules.identity.utils.otp import (
     OTPLocked,
     generate_otp,
-    store_otp,
     send_otp,
+    store_otp,
     verify_otp,
 )
-
 from packly.modules.identity.utils.phone import normalize_phone
-
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +42,7 @@ def mask_phone(phone: str) -> str:
 # ==========================================
 # POST /v1/auth/otp/request
 # ==========================================
+
 
 @router.post(
     "/request",
@@ -122,14 +118,13 @@ async def request_otp(
         mask_phone(phone),
     )
 
-    return OTPRequestResponse(
-        message="OTP has been sent successfully"
-    )
+    return OTPRequestResponse(message="OTP has been sent successfully")
 
 
 # ==========================================
 # POST /v1/auth/otp/verify
 # ==========================================
+
 
 @router.post(
     "/verify",

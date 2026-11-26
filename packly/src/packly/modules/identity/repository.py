@@ -1,8 +1,16 @@
-
-from sqlalchemy import func, select, update, delete
-from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
-from packly.modules.identity.models import OrgType, Users, Organizations,Memberships,MembershipType
+from typing import ClassVar
+
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from packly.modules.identity.models import (
+    Memberships,
+    MembershipType,
+    Organizations,
+    OrgType,
+    Users,
+)
 
 
 class UserRepository:
@@ -30,44 +38,34 @@ class UserRepository:
         self,
         phone: str,
     ) -> Users | None:
-        result = await self.session.execute(
-            select(Users).where(Users.phone == phone)
-        )
+        result = await self.session.execute(select(Users).where(Users.phone == phone))
         return result.scalar_one_or_none()
 
     async def get_user_by_id(
         self,
-        user_id: str,
+        user_id: uuid.UUID,
     ) -> Users | None:
-        result = await self.session.execute(
-            select(Users).where(Users.id == user_id)
-        )
+        result = await self.session.execute(select(Users).where(Users.id == user_id))
         return result.scalar_one_or_none()
 
     async def get_user_by_email(self, email: str) -> Users | None:
-        result = await self.session.execute(
-            select(Users).where(Users.email == email)
-        )
+        result = await self.session.execute(select(Users).where(Users.email == email))
         return result.scalar_one_or_none()
 
     async def update_user(
         self,
-        user_id: str,
+        user_id: uuid.UUID,
         **kwargs,
     ) -> Users | None:
         await self.session.execute(
-            update(Users)
-            .where(Users.id == user_id)
-            .values(**kwargs)
+            update(Users).where(Users.id == user_id).values(**kwargs)
         )
         await self.session.flush()
 
         return await self.get_user_by_id(user_id)
 
-    async def delete_user(self, user_id: str) -> None:
-        await self.session.execute(
-            delete(Users).where(Users.id == user_id)
-        )
+    async def delete_user(self, user_id: uuid.UUID) -> None:
+        await self.session.execute(delete(Users).where(Users.id == user_id))
         await self.session.flush()
 
 
@@ -94,12 +92,10 @@ class OrganizationRepository:
 
     async def get_organization_by_id(
         self,
-        org_id: str,
+        org_id: uuid.UUID,
     ) -> Organizations | None:
         result = await self.session.execute(
-            select(Organizations).where(
-                Organizations.id == org_id
-            )
+            select(Organizations).where(Organizations.id == org_id)
         )
         return result.scalar_one_or_none()
 
@@ -108,21 +104,17 @@ class OrganizationRepository:
         name: str,
     ) -> Organizations | None:
         result = await self.session.execute(
-            select(Organizations).where(
-                Organizations.name == name
-            )
+            select(Organizations).where(Organizations.name == name)
         )
         return result.scalar_one_or_none()
 
     async def update_organization(
         self,
-        org_id: str,
+        org_id: uuid.UUID,
         **kwargs,
     ) -> Organizations | None:
         await self.session.execute(
-            update(Organizations)
-            .where(Organizations.id == org_id)
-            .values(**kwargs)
+            update(Organizations).where(Organizations.id == org_id).values(**kwargs)
         )
         await self.session.flush()
 
@@ -130,12 +122,10 @@ class OrganizationRepository:
 
     async def delete_organization(
         self,
-        org_id: str,
+        org_id: uuid.UUID,
     ) -> None:
         await self.session.execute(
-            delete(Organizations).where(
-                Organizations.id == org_id
-            )
+            delete(Organizations).where(Organizations.id == org_id)
         )
         await self.session.flush()
 
@@ -183,9 +173,7 @@ class MembershipRepository:
     ) -> list[Memberships]:
 
         result = await self.session.execute(
-            select(Memberships).where(
-                Memberships.user_id == user_id
-            )
+            select(Memberships).where(Memberships.user_id == user_id)
         )
 
         return list(result.scalars().all())
@@ -197,7 +185,6 @@ class MembershipRepository:
             select(Memberships).where(Memberships.organization_id == organization_id)
         )
         return list(result.scalars().all())
-
 
     async def delete_membership(
         self,
@@ -225,9 +212,8 @@ class MembershipRepository:
         )
         return result.scalar_one()
 
+    _UPDATABLE_FIELDS: ClassVar[set[str]] = {"role"}
 
-    _UPDATABLE_FIELDS = {"role"}
-    
     async def update_membership(
         self,
         user_id: uuid.UUID,

@@ -11,9 +11,6 @@ logger = logging.getLogger(__name__)
 
 class OTPLocked(Exception):
     """Raised when the user has exceeded the maximum OTP attempts."""
-    pass
-
-
 
 
 def generate_otp() -> str:
@@ -40,7 +37,6 @@ def _hash_otp(phone: str, otp: str) -> str:
     ).hexdigest()
 
 
-
 async def store_otp(phone: str, otp: str) -> None:
     settings = get_settings()
 
@@ -50,6 +46,7 @@ async def store_otp(phone: str, otp: str) -> None:
         _hash_otp(phone, otp),
         ex=settings.otp_ttl,
     )
+
 
 async def send_otp(phone: str, otp: str) -> None:
     settings = get_settings()
@@ -64,6 +61,7 @@ async def send_otp(phone: str, otp: str) -> None:
 
     # Production provider integration
     raise NotImplementedError("Configure OTP provider")
+
 
 async def _lock(phone: str) -> None:
     settings = get_settings()
@@ -102,8 +100,7 @@ async def verify_otp(phone: str, otp: str) -> bool:
     # 3. Compare hashes.
     provided_hash = _hash_otp(phone, otp)
 
-    if hmac.compare_digest(stored_hash, provided_hash):
-
+    if hmac.compare_digest(str(stored_hash), provided_hash):
         # 4. Delete OTP after successful verification.
         deleted = await redis_client.delete(otp_key)
 
