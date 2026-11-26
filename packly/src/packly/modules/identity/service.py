@@ -23,7 +23,11 @@ from packly.modules.identity.schemas import (
     UserCreate,
 )
 from packly.modules.identity.utils.phone import normalize_phone
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
+from packly.core.config import get_settings
+from packly.core.security import create_access_token, create_refresh_token, hash_refresh_token
 
 # ───────────────────────── Exceptions ─────────────────────────
 class IdentityError(Exception):
@@ -60,6 +64,15 @@ class PermissionDeniedError(IdentityError):
 
 class LastOwnerError(IdentityError):
     """Raised when an action would leave an organization without an owner."""
+
+class InvalidRefreshTokenError(IdentityError):
+    pass
+
+
+@dataclass(frozen=True)
+class TokenPair:
+    access_token: str
+    refresh_token: str
 
 
 # ───────────────────────── Service ─────────────────────────
@@ -268,3 +281,84 @@ class IdentityService:
             if org is not None and org.type == OrgType.staff:
                 return
         raise PermissionDeniedError("Platform staff only.")
+
+    async def login(
+        self, user: Users, organization_id: uuid.UUID | None = None
+    ) -> TokenPair:
+        """Issue tokens after a successful OTP. Picks the active organization."""
+        memberships = await self.memberships.get_user_memberships(user.id)
+
+        membership: Memberships | None = None
+        if organization_id is not None:
+            membership = next(
+                (m for m in memberships if m.organization_id == organization_id), None
+            )
+            if membership is None:
+                raise PermissionDeniedError("You are not a member of this organization.")
+        elif memberships:
+            membership = min(memberships, key=lambda m: m.created_at)  # oldest
+
+        tokens = await self._issue_tokens(user.id, membership)
+        await self.session.commit()
+        return tokens
+
+    async def refresh_tokens(self, refresh_token: str) -> TokenPair:
+        """Rotate: the old refresh token dies, a new pair is issued."""
+        stored = await self.sessions.get_by_token_hash(hash_refresh_token(refresh_token))
+        if stored is None:
+            raise InvalidRefreshTokenError("Invalid refresh token.")
+
+        if stored.revoked_at is not None:
+            # An already-used token came back: it was probably stolen.
+            # Kill every session of this user, then reject.
+            await self.sessions.revoke_all_for_user(stored.user_id)
+            await self.session.commit()
+            raise InvalidRefreshTokenError("Refresh token reuse detected.")
+
+        if stored.expires_at <= datetime.now(UTC):
+            raise InvalidRefreshTokenError("Refresh token expired.")
+
+        if not await self.sessions.revoke_session(stored.id):
+            # Two concurrent refreshes with the same token: only one may win.
+            await self.session.rollback()
+            raise InvalidRefreshTokenError("Refresh token already used.")
+
+        # Re-read the membership so role changes / removals apply on refresh.
+        membership = None
+        if stored.organization_id is not None:
+            membership = await self.memberships.get_membership(
+                stored.user_id, stored.organization_id
+            )
+
+        tokens = await self._issue_tokens(stored.user_id, membership)
+        await self.session.commit()
+        return tokens
+
+    async def logout(self, refresh_token: str) -> None:
+        """Idempotent: unknown or already-revoked tokens are ignored."""
+        stored = await self.sessions.get_by_token_hash(hash_refresh_token(refresh_token))
+        if stored is not None:
+            await self.sessions.revoke_session(stored.id)
+            await self.session.commit()
+
+    async def get_current_user(self, user_id: uuid.UUID) -> Users:
+        return await self._require_user(user_id)
+
+    async def _issue_tokens(
+        self, user_id: uuid.UUID, membership: Memberships | None
+    ) -> TokenPair:
+        settings = get_settings()
+        org_id = membership.organization_id if membership else None
+        role = MembershipType(membership.role).value if membership else None
+
+        refresh = create_refresh_token()
+        await self.sessions.create_session(
+            user_id=user_id,
+            organization_id=org_id,
+            refresh_token_hash=hash_refresh_token(refresh),
+            expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days),
+        )
+        return TokenPair(
+            access_token=create_access_token(user_id, org_id, role),
+            refresh_token=refresh,
+        )

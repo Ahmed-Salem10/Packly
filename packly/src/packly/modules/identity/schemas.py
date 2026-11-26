@@ -115,6 +115,7 @@ class OTPVerify(_PhoneMixin):
 
     phone: str = Field(min_length=10, max_length=32)
     code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    organization_id: uuid.UUID | None = None
 
 
 class OTPRequestResponse(BaseModel):
@@ -124,3 +125,27 @@ class OTPRequestResponse(BaseModel):
 class OTPVerifyResponse(BaseModel):
     message: str
     verified: bool
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str = Field(min_length=20, max_length=200)
+
+
+class LogoutRequest(RefreshRequest):
+    pass
+
+
+class CurrentUserResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: str | None
+    phone: str
+    organization_id: uuid.UUID | None
+    role: str | None

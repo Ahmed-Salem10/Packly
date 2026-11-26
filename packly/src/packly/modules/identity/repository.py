@@ -1,7 +1,7 @@
 import uuid
 from typing import ClassVar
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import DateTime, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packly.modules.identity.models import (
@@ -10,6 +10,7 @@ from packly.modules.identity.models import (
     Organizations,
     OrgType,
     Users,
+    Sessions,
 )
 
 
@@ -236,3 +237,50 @@ class MembershipRepository:
             await self.session.flush()
 
         return await self.get_membership(user_id, organization_id)
+
+
+class SessionRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_session(
+        self,
+        user_id: uuid.UUID,
+        organization_id: uuid.UUID | None,
+        refresh_token_hash: str,
+        expires_at: DateTime,
+    ) -> Sessions:
+        new_session = Sessions(
+            user_id=user_id,
+            organization_id=organization_id,
+            refresh_token_hash=refresh_token_hash,
+            expires_at=expires_at,
+        )
+        self.session.add(new_session)
+        await self.session.flush()
+        return new_session
+
+    async def get_by_token_hash(self, token_hash: str) -> Sessions | None:
+        result = await self.session.execute(
+            select(Sessions).where(Sessions.refresh_token_hash == token_hash)
+        )
+        return result.scalar_one_or_none()
+
+    async def revoke_session(self, session_id: uuid.UUID) -> bool:
+        """Atomically revoke. Returns False if it was already revoked (lost a race)."""
+        result = await self.session.execute(
+            update(Sessions)
+            .where(Sessions.id == session_id, Sessions.revoked_at.is_(None))
+            .values(revoked_at=func.now())
+            .returning(Sessions.id)
+        )
+        await self.session.flush()
+        return result.scalar_one_or_none() is not None
+
+    async def revoke_all_for_user(self, user_id: uuid.UUID) -> None:
+        await self.session.execute(
+            update(Sessions)
+            .where(Sessions.user_id == user_id, Sessions.revoked_at.is_(None))
+            .values(revoked_at=func.now())
+        )
+        await self.session.flush()

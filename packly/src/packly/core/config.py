@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     otp_ttl: int = 300
     is_production: bool = False
 
+    jwt_secret_key: SecretStr
+    jwt_algorithm: str = "HS256"
+    access_token_expire_seconds: int = 900
+    refresh_token_expire_days: int = 30
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

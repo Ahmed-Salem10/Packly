@@ -4,7 +4,7 @@ from slowapi.errors import RateLimitExceeded
 
 from packly.core.logging import setup_logging
 from packly.core.ratelimit import limiter
-from packly.modules.identity.router import router
+from packly.modules.identity.router import router,auth_router,me_router
 
 
 def create_app() -> FastAPI:
@@ -17,6 +17,8 @@ def create_app() -> FastAPI:
         _rate_limit_exceeded_handler,  # type: ignore[arg-type]
     )
     app.include_router(router)
+    app.include_router(auth_router)
+    app.include_router(me_router)
 
     @app.get("/healthz")
     def read_health():

@@ -1,4 +1,5 @@
 import logging
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -6,16 +7,27 @@ from fastapi import (
     Request,
     Response,
     status,
+    Depends
 )
 
 from packly.core.ratelimit import limiter
 from packly.core.redis import redis_client
+from packly.modules.identity.deps import CurrentUser, current_user, get_identity_service
 from packly.modules.identity.schemas import (
     OTPRequest,
     OTPRequestResponse,
     OTPVerify,
     OTPVerifyResponse,
+    CurrentUserResponse,
+    LogoutRequest,
+    RefreshRequest,
+    TokenResponse,
 )
+
+from packly.modules.identity.service import (
+    IdentityService, InvalidRefreshTokenError, PermissionDeniedError, UserNotFoundError,
+)
+
 from packly.modules.identity.utils.otp import (
     OTPLocked,
     generate_otp,
@@ -128,13 +140,14 @@ async def request_otp(
 
 @router.post(
     "/verify",
-    response_model=OTPVerifyResponse,
+    response_model=TokenResponse,
 )
 @limiter.limit("5/minute")
 async def verify_otp_endpoint(
     payload: OTPVerify,
     request: Request,
     response: Response,
+    service: Annotated[IdentityService, Depends(IdentityService)],
 ):
     """
     Verify the OTP entered by the user.
@@ -181,7 +194,74 @@ async def verify_otp_endpoint(
         mask_phone(phone),
     )
 
-    return OTPVerifyResponse(
-        message="OTP verified successfully",
-        verified=True,
+    user = await service.get_user_by_phone(phone)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number is not registered",
+        )
+
+    try:
+        tokens = await service.login(user, payload.organization_id)
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    return TokenResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)
+
+auth_router = APIRouter(prefix="/v1/auth", tags=["Auth"])
+
+
+@auth_router.post("/refresh", response_model=TokenResponse)
+@limiter.limit("20/minute")
+async def refresh(
+    payload: RefreshRequest,
+    request: Request,
+    response: Response,
+    service: Annotated[IdentityService, Depends(get_identity_service)],
+):
+    try:
+        tokens = await service.refresh_tokens(payload.refresh_token)
+    except InvalidRefreshTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    return TokenResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)
+
+
+@auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
+async def logout(
+    payload: LogoutRequest,
+    request: Request,
+    response: Response,
+    service: Annotated[IdentityService, Depends(get_identity_service)],
+):
+    await service.logout(payload.refresh_token)
+
+
+me_router = APIRouter(prefix="/v1", tags=["Me"])
+
+
+@me_router.get("/me", response_model=CurrentUserResponse)
+async def me(
+    user: Annotated[CurrentUser, Depends(current_user)],
+    service: Annotated[IdentityService, Depends(get_identity_service)],
+):
+    try:
+        db_user = await service.get_current_user(user.id)
+    except UserNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User no longer exists",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    return CurrentUserResponse(
+        id=db_user.id,
+        name=db_user.name,
+        email=db_user.email,
+        phone=db_user.phone,
+        organization_id=user.org_id,
+        role=user.role,
     )
