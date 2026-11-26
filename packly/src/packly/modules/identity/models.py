@@ -1,8 +1,11 @@
-from packly.core.models import Base,IdMixin,TimestampMixin
-from sqlalchemy.orm import Mapped, mapped_column 
-from sqlalchemy import ForeignKey, String,Boolean, Uuid, UniqueConstraint
 import enum
 import uuid
+
+from sqlalchemy import Boolean, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from packly.core.models import Base, IdMixin, TimestampMixin
+
 
 class Users(Base, IdMixin, TimestampMixin):
     __tablename__ = "users"
@@ -11,22 +14,24 @@ class Users(Base, IdMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
 
 
-
 class OrgType(str, enum.Enum):
     buyer = "buyer"
     factory = "factory"
     staff = "staff"
-    
-class MembershipType(str,enum.Enum):
+
+
+class MembershipType(str, enum.Enum):
     owner = "owner"
-    member= "member"
-    viewer= "viewer"
+    member = "member"
+    viewer = "viewer"
 
 
 class Organizations(Base, IdMixin, TimestampMixin):
     __tablename__ = "organizations"
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    type: Mapped[OrgType] = mapped_column(String(20), nullable=False)
+    type: Mapped[OrgType] = mapped_column(
+        Enum(OrgType, native_enum=False, length=20), nullable=False
+    )
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     address: Mapped[str] = mapped_column(String(200), nullable=False)
 
@@ -34,9 +39,7 @@ class Organizations(Base, IdMixin, TimestampMixin):
 class Memberships(Base, IdMixin, TimestampMixin):
     __tablename__ = "memberships"
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "organization_id"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "organization_id"),)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -44,11 +47,10 @@ class Memberships(Base, IdMixin, TimestampMixin):
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,index=True
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     role: Mapped[MembershipType] = mapped_column(
-        String(20),
+        Enum(MembershipType, native_enum=False, length=20),
         nullable=False,
     )

@@ -12,13 +12,12 @@ dependencies = [
     "asyncpg>=0.32.0",
     "fastapi>=0.163.1",
     "psycopg[binary]>=3.3.9",
+    "pydantic[email]>=2.0",
     "pydantic-settings>=2.16.3",
-    "pydentic>=0.0.1.dev3",
     "redis>=8.1.0",
     "slowapi>=0.1.10",
     "sqlalchemy[asyncio]>=2.1.9",
     "structlog>=26.1.0",
-    "uuid>=1.30",
     "uuid6>=2025.0.1",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -39,3 +38,6 @@ dev = [
     "pytest-asyncio>=1.5.0",
     "ruff>=0.17.5",
 ]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]

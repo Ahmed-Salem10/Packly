@@ -1,14 +1,27 @@
 import uuid
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 
 from packly.modules.identity.models import MembershipType, OrgType
 from packly.modules.identity.utils.phone import normalize_phone
 
-Name150 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
-Name100 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-Address200 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Name150 = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)
+]
+Name100 = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
+]
+Address200 = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
 
 
 class _PhoneMixin(BaseModel):
@@ -90,32 +103,18 @@ class UserOrganizationRead(BaseModel):
     role: MembershipType
 
 
-from pydantic import BaseModel, Field, ConfigDict
-
-
-class OTPRequest(BaseModel):
+# ───────────────────────── OTP ─────────────────────────
+class OTPRequest(_PhoneMixin):
     model_config = ConfigDict(extra="forbid")
 
-    phone: str = Field(
-        min_length=10,
-        max_length=16,
-        description="User phone number",
-    )
+    phone: str = Field(min_length=10, max_length=32, description="User phone number")
 
 
-class OTPVerify(BaseModel):
+class OTPVerify(_PhoneMixin):
     model_config = ConfigDict(extra="forbid")
 
-    phone: str = Field(
-        min_length=10,
-        max_length=16,
-    )
-
-    code: str = Field(
-        min_length=6,
-        max_length=6,
-        pattern=r"^\d{6}$",
-    )
+    phone: str = Field(min_length=10, max_length=32)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
 class OTPRequestResponse(BaseModel):

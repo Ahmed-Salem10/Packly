@@ -32,6 +32,36 @@ jobs:
       run:
         working-directory: ./packly
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: packly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d packly"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://app:ci_password@localhost:5432/packly
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET_KEY: ci-jwt-secret
+      OTP_SECRET_KEY: ci-otp-secret
+
 
     steps:
       # 1. Get repository source code
@@ -64,6 +94,10 @@ jobs:
       - name: Mypy
         run: uv run mypy src/packly/
 
-      # 8. Run tests
+      # 8. Apply migrations (also validates them)
+      - name: Alembic upgrade
+        run: uv run alembic upgrade head
+
+      # 9. Run tests
       - name: Pytest
         run: uv run pytest -q
