@@ -13,12 +13,15 @@ from packly.modules.identity.schemas import (
     OTPRequestResponse,
     OTPVerify,
     RefreshRequest,
+    RegisterRequest,
     TokenResponse,
+    UserCreate,
 )
 from packly.modules.identity.service import (
     IdentityService,
     InvalidRefreshTokenError,
     PermissionDeniedError,
+    UserAlreadyExistsError,
     UserNotFoundError,
 )
 from packly.modules.identity.utils.otp import (
@@ -265,3 +268,33 @@ async def me(
         organization_id=user.org_id,
         role=user.role,
     )
+
+@auth_router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    service: Annotated[IdentityService, Depends(get_identity_service)],
+):
+    try:
+        phone = normalize_phone(payload.phone)
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid phone number")
+
+    try:
+        ok = await verify_otp(phone=phone, otp=payload.code)
+    except OTPLocked:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many failed attempts. Try again later.")
+    if not ok:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP")
+
+    try:
+        user = await service.register_user(
+            UserCreate(phone=phone, name=payload.name, email=payload.email)
+        )
+    except UserAlreadyExistsError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    tokens = await service.login(user)
+    return TokenResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)

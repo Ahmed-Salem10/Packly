@@ -150,3 +150,8 @@ class CurrentUserResponse(BaseModel):
     phone: str
     organization_id: uuid.UUID | None
     role: str | None
+
+class RegisterRequest(UserCreate):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
