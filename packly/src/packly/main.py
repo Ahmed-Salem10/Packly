@@ -1,6 +1,9 @@
 from fastapi import FastAPI
+from packly.core.errors import register_exception_handlers
+from packly.core.middleware import RequestIdMiddleware, access_log_middleware 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from packly.core.logging import setup_logging
 from packly.core.ratelimit import limiter
@@ -16,6 +19,9 @@ def create_app() -> FastAPI:
         RateLimitExceeded,
         _rate_limit_exceeded_handler,  # type: ignore[arg-type]
     )
+    app.add_middleware(BaseHTTPMiddleware, dispatch=access_log_middleware)
+    app.add_middleware(RequestIdMiddleware)
+    register_exception_handlers(app)
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(me_router)

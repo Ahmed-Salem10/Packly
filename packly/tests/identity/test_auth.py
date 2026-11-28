@@ -50,7 +50,7 @@ async def test_me_expired_token_is_401(client):
     token = create_access_token(uuid.uuid4(), None, None, ttl=-1)
     r = await client.get("/v1/me", headers=auth(token))
     assert r.status_code == 401
-    assert "expired" in r.json()["detail"].lower()
+    assert "expired" in r.json()["message"].lower()
 
 
 @pytest.mark.asyncio
